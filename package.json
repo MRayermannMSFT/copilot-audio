@@ -1,6 +1,6 @@
 {
   "name": "copilot-audio",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Copilot CLI extension that plays synthesised music on session events",
   "type": "module",
   "scripts": {

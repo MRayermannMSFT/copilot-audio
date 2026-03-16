@@ -1,3 +1,10 @@
+## [1.0.1](https://github.com/MRayermannMSFT/copilot-audio/compare/v1.0.0...v1.0.1) (2026-03-16)
+
+
+### Bug Fixes
+
+* use SDK 0.1.33-preview.2 with proper joinSession types ([eda3d0a](https://github.com/MRayermannMSFT/copilot-audio/commit/eda3d0a3c8864959aaee2d04097d1acb66272d2e))
+
 # 1.0.0 (2026-03-16)
 
 
