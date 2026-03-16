@@ -1,84 +1,98 @@
 import {
   generateNote,
-  generateChord,
-  generateArpeggio,
   samplesToWav,
   type NoteOptions,
 } from "./synth.js";
 
 // ── Frequency helpers ───────────────────────────────────────────────
-export function midiToFreq(midi: number): number {
+function midiToFreq(midi: number): number {
   return 440 * Math.pow(2, (midi - 69) / 12);
 }
 
-// Named pitches we use
-const N = {
-  C4: midiToFreq(60),
-  D4: midiToFreq(62),
-  E4: midiToFreq(64),
-  G4: midiToFreq(67),
-  A4: midiToFreq(69),
-  C5: midiToFreq(72),
-  E5: midiToFreq(76),
-  G5: midiToFreq(79),
-  C6: midiToFreq(84),
-  // darker tones for errors
-  Eb4: midiToFreq(63),
-  Bb3: midiToFreq(58),
-} as const;
+// C major pentatonic across 3 octaves — always consonant
+const SCALE = [
+  60, 62, 64, 67, 69,  // C4 D4 E4 G4 A4
+  72, 74, 76, 79, 81,  // C5 D5 E5 G5 A5
+  84, 86, 88,           // C6 D6 E6
+].map(midiToFreq);
+
+// Minor pentatonic for errors — tense but musical
+const MINOR_SCALE = [
+  58, 60, 63, 65, 67,  // Bb3 C4 Eb4 F4 G4
+  70, 72, 75, 77, 79,  // Bb4 C5 Eb5 F5 G5
+].map(midiToFreq);
+
+/** Deterministic hash of a string → scale index. */
+function hashToIndex(s: string, scaleLen: number): number {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) {
+    h = ((h << 5) - h + s.charCodeAt(i)) | 0;
+  }
+  return Math.abs(h) % scaleLen;
+}
 
 // ── Timbres ─────────────────────────────────────────────────────────
-const BELL: NoteOptions = {
-  envelope: { attack: 0.005, decay: 0.15, sustain: 0.2, release: 0.4 },
-  harmonics: [1.0, 0.4, 0.15, 0.06],
-  volume: 0.22,
-};
+const TIMBRES = {
+  bell:  { envelope: { attack: 0.02, decay: 0.5, sustain: 0.25, release: 0.9 }, harmonics: [1.0, 0.45, 0.15, 0.06, 0.02], volume: 0.22 },
+  pluck: { envelope: { attack: 0.01, decay: 0.4, sustain: 0.2, release: 0.8 }, harmonics: [1.0, 0.5, 0.2, 0.1, 0.04], volume: 0.2 },
+  soft:  { envelope: { attack: 0.06, decay: 0.5, sustain: 0.25, release: 0.8 }, harmonics: [1.0, 0.2, 0.06], volume: 0.18 },
+  bright:{ envelope: { attack: 0.01, decay: 0.4, sustain: 0.2, release: 0.7 }, harmonics: [1.0, 0.5, 0.25, 0.1, 0.04], volume: 0.18 },
+  warm:  { envelope: { attack: 0.04, decay: 0.5, sustain: 0.3, release: 0.8 }, harmonics: [1.0, 0.3, 0.1, 0.03], volume: 0.2 },
+  dark:  { envelope: { attack: 0.03, decay: 0.6, sustain: 0.3, release: 1.0 }, harmonics: [1.0, 0.5, 0.25, 0.15, 0.08], volume: 0.2 },
+  pad:   { envelope: { attack: 0.12, decay: 0.5, sustain: 0.5, release: 1.0 }, harmonics: [1.0, 0.4, 0.15, 0.08], volume: 0.18 },
+} satisfies Record<string, NoteOptions>;
 
-const CHIME: NoteOptions = {
-  envelope: { attack: 0.01, decay: 0.2, sustain: 0.12, release: 0.5 },
-  harmonics: [1.0, 0.3, 0.1],
-  volume: 0.18,
-};
-
-const PAD: NoteOptions = {
-  envelope: { attack: 0.05, decay: 0.15, sustain: 0.5, release: 0.5 },
-  harmonics: [1.0, 0.5, 0.2, 0.08],
-  volume: 0.18,
-};
-
-const DARK: NoteOptions = {
-  envelope: { attack: 0.01, decay: 0.3, sustain: 0.2, release: 0.6 },
-  harmonics: [1.0, 0.6, 0.3, 0.15],
-  volume: 0.2,
-};
-
-// ── Event sounds (pre-rendered WAV buffers) ─────────────────────────
-
-/** Ascending pentatonic arpeggio — welcome chime. */
-export function sessionStartSound(): Buffer {
-  return samplesToWav(
-    generateArpeggio([N.C5, N.E5, N.G5, N.C6], 0.25, 0.06, BELL),
-  );
+// ── Tool → timbre mapping ───────────────────────────────────────────
+function toolTimbre(toolName: string): NoteOptions {
+  const t = toolName.toLowerCase();
+  if (["edit", "create", "view", "show_file"].includes(t)) return TIMBRES.pluck;
+  if (["grep", "glob", "sql"].some(k => t.includes(k)))    return TIMBRES.soft;
+  if (["powershell", "bash", "shell"].some(k => t.includes(k))) return TIMBRES.bright;
+  if (["web_fetch", "web_search"].includes(t))              return TIMBRES.warm;
+  if (t.includes("github") || t.includes("git"))           return TIMBRES.bell;
+  if (["task", "read_agent", "write_agent"].some(k => t.includes(k))) return TIMBRES.bell;
+  return TIMBRES.soft;
 }
 
-/** Single soft high-register chime. */
-export function userPromptSound(): Buffer {
-  return samplesToWav(generateNote(N.E5, 0.35, CHIME));
+// ── Public API: one note per event, modulated by content ────────────
+
+export function sessionStartNote(): Buffer {
+  return samplesToWav(generateNote(SCALE[10], 1.0, TIMBRES.bell));
 }
 
-/** Gentle ascending two-note motif. */
-export function toolCompleteSound(): Buffer {
-  return samplesToWav(generateArpeggio([N.G4, N.C5], 0.2, 0.04, CHIME));
+export function sessionEndNote(): Buffer {
+  return samplesToWav(generateNote(SCALE[0], 1.8, TIMBRES.pad));
 }
 
-/** Descending minor interval — something went wrong. */
-export function errorSound(): Buffer {
-  return samplesToWav(generateArpeggio([N.Eb4, N.Bb3], 0.3, 0.06, DARK));
+export function userPromptNote(prompt: string): Buffer {
+  const freq = SCALE[hashToIndex(prompt, SCALE.length)];
+  const dur = 0.6 + Math.min(prompt.length / 150, 0.5);
+  return samplesToWav(generateNote(freq, dur, TIMBRES.warm));
 }
 
-/** Warm closing chord (C major). */
-export function sessionEndSound(): Buffer {
-  return samplesToWav(
-    generateChord([N.C4, N.E4, N.G4, N.C5], 0.9, PAD),
-  );
+export function toolStartNote(toolName: string): Buffer {
+  const freq = SCALE[hashToIndex(toolName, SCALE.length)];
+  return samplesToWav(generateNote(freq, 0.6, toolTimbre(toolName)));
+}
+
+export function toolCompleteNote(toolName: string, success: boolean): Buffer {
+  if (success) {
+    const idx = hashToIndex(toolName, SCALE.length);
+    const freq = SCALE[Math.min(idx + 1, SCALE.length - 1)];
+    return samplesToWav(generateNote(freq, 0.7, toolTimbre(toolName)));
+  } else {
+    const freq = MINOR_SCALE[hashToIndex(toolName, MINOR_SCALE.length)];
+    return samplesToWav(generateNote(freq, 0.9, TIMBRES.dark));
+  }
+}
+
+export function errorNote(errorContext: string): Buffer {
+  const freq = MINOR_SCALE[hashToIndex(errorContext, MINOR_SCALE.length)];
+  const dur = errorContext === "system" ? 1.2 : 0.9;
+  return samplesToWav(generateNote(freq, dur, TIMBRES.dark));
+}
+
+export function subagentNote(agentName: string): Buffer {
+  const freq = SCALE[hashToIndex(agentName, SCALE.length)];
+  return samplesToWav(generateNote(freq, 0.8, TIMBRES.bell));
 }

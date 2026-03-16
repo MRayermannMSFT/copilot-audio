@@ -1,8 +1,15 @@
-import { writeFile, unlink } from "node:fs/promises";
+import { writeFile, unlink, appendFile } from "node:fs/promises";
 import { execFileSync, spawn } from "node:child_process";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { randomBytes } from "node:crypto";
+
+const LOG_FILE = join(tmpdir(), "copilot-audio.log");
+
+async function log(msg: string): Promise<void> {
+  const line = `[${new Date().toISOString()}] [player] ${msg}\n`;
+  await appendFile(LOG_FILE, line).catch(() => {});
+}
 
 function tempPath(): string {
   return join(tmpdir(), `copilot-audio-${randomBytes(6).toString("hex")}.wav`);
@@ -59,18 +66,31 @@ function playerCommand(filePath: string): { cmd: string; args: string[] } | null
 /** Write a WAV buffer to a temp file and play it via the platform's player. */
 export async function playWav(wavBuffer: Buffer): Promise<void> {
   const path = tempPath();
+  await log(`Writing WAV (${wavBuffer.length} bytes) to ${path}`);
   await writeFile(path, wavBuffer);
 
   const command = playerCommand(path);
   if (!command) {
+    await log(`No player found for platform ${process.platform}`);
     await unlink(path).catch(() => {});
     return;
   }
 
-  const child = spawn(command.cmd, command.args, { stdio: "ignore", detached: true });
-  child.unref();
+  await log(`Spawning: ${command.cmd} ${command.args.join(" ")}`);
 
-  const cleanup = () => unlink(path).catch(() => {});
-  child.on("close", cleanup);
-  child.on("error", cleanup);
+  const child = spawn(command.cmd, command.args, {
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+
+  let stderr = "";
+  child.stderr?.on("data", (d: Buffer) => { stderr += d.toString(); });
+
+  child.on("close", (code) => {
+    log(`Player exited code=${code} stderr=${stderr}`).catch(() => {});
+    unlink(path).catch(() => {});
+  });
+  child.on("error", (err) => {
+    log(`Player spawn error: ${err.message}`).catch(() => {});
+    unlink(path).catch(() => {});
+  });
 }
