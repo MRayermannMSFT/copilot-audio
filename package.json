@@ -1,0 +1,26 @@
+{
+  "name": "copilot-audio",
+  "version": "1.0.0",
+  "description": "Copilot CLI extension that plays synthesised music on session events",
+  "type": "module",
+  "scripts": {
+    "build": "esbuild src/extension.ts --bundle --format=esm --platform=node --outfile=dist/extension.mjs --external:@github/copilot-sdk",
+    "typecheck": "tsc --noEmit",
+    "deploy": "npm run build && node -e \"const fs=require('fs');const p=require('path');const d=p.join(require('os').homedir(),'.copilot','extensions','copilot-audio');fs.mkdirSync(d,{recursive:true});fs.copyFileSync('dist/extension.mjs',p.join(d,'extension.mjs'));console.log('Deployed to '+d)\""
+  },
+  "keywords": [
+    "copilot",
+    "extension",
+    "audio",
+    "music"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "@github/copilot-sdk": "^0.1.32"
+  },
+  "devDependencies": {
+    "@types/node": "^25.5.0",
+    "esbuild": "^0.27.4",
+    "typescript": "^5.9.3"
+  }
+}
