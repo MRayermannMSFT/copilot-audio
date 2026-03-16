@@ -1,3 +1,10 @@
+# [1.1.0](https://github.com/MRayermannMSFT/copilot-audio/compare/v1.0.1...v1.1.0) (2026-03-16)
+
+
+### Features
+
+* content-aware sounds with warmer timbres and longer sustain ([d69fbeb](https://github.com/MRayermannMSFT/copilot-audio/commit/d69fbebeb3055ac205df7f359175123e7b735c4c))
+
 ## [1.0.1](https://github.com/MRayermannMSFT/copilot-audio/compare/v1.0.0...v1.0.1) (2026-03-16)
 
 
