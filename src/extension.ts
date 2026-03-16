@@ -1,5 +1,5 @@
+import { joinSession } from "@github/copilot-sdk/extension";
 import { approveAll } from "@github/copilot-sdk";
-import { extension } from "@github/copilot-sdk/extension";
 import { playWav } from "./player.js";
 import {
   sessionStartSound,
@@ -18,9 +18,7 @@ const sounds = {
   end: sessionEndSound(),
 };
 
-await extension.start();
-
-await extension.createSession({
+const session = await joinSession({
   onPermissionRequest: approveAll,
   tools: [],
   hooks: {
